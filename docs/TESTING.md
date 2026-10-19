@@ -59,39 +59,66 @@ make validate-strings
 
 `make coverage-gate` currently **reports** whether hostless coverage reaches 90%; it does not fail below that threshold. CI can separately enforce Codecov project/patch checks. High coverage of pure policies does not establish integration, lifecycle, layout or signed-build confidence.
 
-### Codecov coverage signals
+### Layer-aware Codecov coverage gates
 
-CI runs both test suites and uploads their coverage as separate Codecov flags: `swiftpm_logic` (SwiftPM LCOV) and `app_hosted` (Xcode/Slather Cobertura). The combined project coverage is still reported, but its status is **informational** because asynchronous AppKit/Combine execution can vary between runs even when production code is unchanged.
+CI runs **both** automated suites on every PR and on `master`, exporting
+`swiftpm_logic` (SwiftPM LCOV) and `app_hosted` (Xcode/Slather Cobertura).
+The workflow requires both reports to be present, nonempty and valid **before
+uploading either one**. The same report validation runs in CI on synthetic
+valid, missing and malformed inputs. Both Codecov uploads use
+`fail_ci_if_error: true`; public fork PRs can use tokenless uploads while
+`master` continues to use the repository secret. No flag carries forward
+coverage from an older run. Codecov waits for two uploads before publishing
+its statuses; the GitHub `Build and Test` job independently fails if a report
+or upload is missing.
 
-The blocking checks are:
+| Check | Scope | Enforcement |
+| --- | --- | --- |
+| `Build and Test` | Tests, exports, both reports, both uploads | **Blocking** |
+| `codecov/project/swiftpm_logic` | Headless policies, SwiftPM flag | **Blocking**, `target: auto`, zero tolerance |
+| `codecov/patch/domain_logic` | Explicit testable policy and orchestration file paths in `codecov.yml` | **Blocking**, 85% on changed coverable lines |
+| `codecov/patch/full_app` | All `MeetingBar/` production code, including EventKit, AppAuth, SwiftUI | **Informational**, 85% reference target |
+| `codecov/project/default` | Combined app and SwiftPM coverage trend | **Informational** |
 
-- `codecov/project/swiftpm_logic`: zero-tolerance coverage comparison for deterministic headless policies.
-- `codecov/patch`: 85% coverage target for changed coverable code, subject to careful review of untested paths.
+**Why a file-level split?** Codecov patch statuses filter by paths, not by
+individual functions in a Swift file. The blocking `domain_logic` list
+includes pure SwiftPM sources **and** testable app orchestration such as
+`CalendarSync`, `CalendarRepository`, notification scheduling, and
+meeting opening. These remain protected even if they also call platform APIs.
+Raw EventKit queries, AppAuth callbacks and SwiftUI view construction are
+visible in `full_app`, rather than forced into artificial UI or live-OAuth
+tests merely to clear an 85% gate. A file that mixes the two is **not
+automatically exempt**: a reviewer must verify the policy/adapter boundary
+and require deterministic tests for any extractable behavior.
 
-Both coverage flags use `carryforward: false`; a missing current report should not be replaced by prior coverage. Upload errors fail the test workflow. A passing threshold does **not** substitute for failure/recovery and integration tests.
+The tracked paths are intentionally explicit. When adding a SwiftPM source,
+update `codecov.yml` in the same PR; a CI policy test checks that all
+`Package.swift` logic sources belong to the blocking gate. For other new
+production logic or refactored files, classify them during review rather than
+silently treating an unlisted file as an allowed gap. Keep broad `ignore`
+patterns out of Codecov configuration.
 
-The first CI run against an older `master` cannot compare the new `swiftpm_logic` flag to a baseline. Only enforce that comparison after a `master` upload has established the same flag. When aggregate coverage drops, compare changes in covered files, flags, and timing-sensitive tests rather than adding artificial assertions to raise the percentage.
+A Codecov percentage is not proof of actual provider reliability. For
+system-boundary changes, review missing app patch lines and demand contract
+tests for injected seams, cancellation, refresh failure, stale-state
+preservation and recovery. Run the signed Google/Keychain and EventKit/TCC
+smoke checks before a release when those platform behaviors change. Do not
+treat an informational status as evidence that those paths were exercised.
 
-### Reviewing system-boundary patch coverage
+**Branch protection migration:** once the new checks have appeared on a PR
+and on `master`, replace legacy required `codecov/patch` with
+`codecov/patch/domain_logic`, and keep `Build and Test` and
+`codecov/project/swiftpm_logic` required. Do **not** require the
+informational `full_app` or combined project statuses. If the GitHub App
+cannot edit branch rules, a maintainer must apply this in repository
+Settings. The new status names need a successful `master` upload before
+they can be selected reliably. The status transition must not accidentally
+remove existing security/build required checks.
 
-The 85% `codecov/patch` check is a default guard, not a substitute for
-test-design review. When a reliability fix touches macOS framework or external
-authorization callbacks that cannot be exercised deterministically in ordinary
-CI, distinguish untested *policy* from untested *platform integration*.
-
-For any requested exception, the PR must record the **final** coverage report
-(after both uploads), the uncovered production branches by subsystem, which
-failure/recovery contracts are already tested, and what still requires a signed
-macOS release smoke. The maintainer must explicitly accept the residual risk.
-Keep `codecov/project/swiftpm_logic` blocking; do not lower the global patch
-target, hide whole files, or add assertions that only increase coverage counts.
-A failed required check stays failed unless an authorized branch-protection
-exception is applied: documenting one does not make CI green.
-
-The follow-up design for component/layer-aware checks is tracked in
-[#1028](https://github.com/leits/MeetingBar/issues/1028). Until that is
-implemented, system-boundary exceptions are exceptional and release smoke is
-still required.
+The follow-up investigation in [#1028](https://github.com/leits/MeetingBar/issues/1028)
+covers any observed hostless coverage variance (98.84% versus 98.98%
+with no relevant production changes). Do not loosen the zero-tolerance
+regression check without first identifying the varying lines and cause.
 
 ### Optional performance measurements
 
