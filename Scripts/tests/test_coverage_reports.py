@@ -18,11 +18,11 @@ from validate_coverage_reports import (  # noqa: E402
 
 
 LCOV = (
-    "TN:\\n"
-    "SF:MeetingBar/Calendar/EventFiltering.swift\\n"
-    "DA:12,1\\n"
-    "DA:13,0\\n"
-    "end_of_record\\n"
+    "TN:\n"
+    "SF:MeetingBar/Calendar/EventFiltering.swift\n"
+    "DA:12,1\n"
+    "DA:13,0\n"
+    "end_of_record\n"
 )
 XML = (
     '<coverage lines-valid="2" lines-covered="1">'
