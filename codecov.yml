@@ -1,8 +1,10 @@
-# Keep high-signal coverage checks blocking while preserving the whole-project
-# trend without failing on execution-path variation in the AppKit/Combine suite.
-#
-# App-hosted and SwiftPM reports are separately flagged; both are uploaded
-# on every CI run. Do not carry forward coverage from stale test runs.
+# Two coverage uploads per CI run (hostless SwiftPM + app-hosted Xcode).
+# Delay Codecov statuses until both uploads are processed. CI also verifies
+# that both reports exist before starting either upload.
+codecov:
+  notify:
+    after_n_builds: 2
+
 flags:
   swiftpm_logic:
     carryforward: false
@@ -12,20 +14,60 @@ flags:
 coverage:
   status:
     project:
-      # The aggregate coverage remains visible in checks and PR reports, but
-      # can vary slightly between otherwise identical asynchronous UI runs.
+      # Whole-application trend includes framework boundaries. Informational
+      # because AppKit/Combine execution varies between runs.
       default:
         target: auto
         informational: true
-      # Deterministic, headless logic tests provide a reliable regression gate.
+      # Preserve the strict headless logic regression check.
       swiftpm_logic:
         flags:
           - swiftpm_logic
         target: auto
         threshold: 0%
+        if_not_found: failure
     patch:
-      # Require meaningful tests for newly added/changed production code.
-      # A fixed floor is clearer than auto (which can inherit a low baseline).
-      default:
+      # A global 85% gate on all app code penalizes real EventKit, OAuth and
+      # SwiftUI boundaries. Protect testable domain and orchestration paths
+      # instead; these paths include mixed files whose behavior is testable.
+      # Update this list when new pure-policy sources are added to Package.swift.
+      domain_logic:
         target: 85%
         threshold: 0%
+        if_not_found: failure
+        paths:
+          - MeetingBar/Utilities/Diagnostics/DiagnosticsReport.swift
+          - MeetingBar/Calendar/EventFiltering.swift
+          - MeetingBar/Calendar/EventSelection.swift
+          - MeetingBar/Calendar/EventFiltering+MeetingBar.swift
+          - MeetingBar/Calendar/EventSelection+MeetingBar.swift
+          - MeetingBar/Calendar/CalendarRepository.swift
+          - MeetingBar/Calendar/CalendarSync.swift
+          - MeetingBar/Calendar/ProviderHealth.swift
+          - MeetingBar/Calendar/MBCalendar.swift
+          - MeetingBar/Calendar/MBEvent.swift
+          - MeetingBar/Calendar/Providers/Google/GoogleCalendarPolicy.swift
+          - MeetingBar/Calendar/Providers/Google/GoogleCalendarPagination.swift
+          - MeetingBar/Calendar/Providers/Google/GoogleCalendarHTTPClient.swift
+          - MeetingBar/Calendar/Providers/Google/GoogleCalendarDataReader.swift
+          - MeetingBar/Meetings/MeetingLinkDetector.swift
+          - MeetingBar/Meetings/MeetingProvider.swift
+          - MeetingBar/Meetings/MeetingOpener.swift
+          - MeetingBar/Meetings/MeetingOpenPreferencesMigration.swift
+          - MeetingBar/Notifications/EventActionPolicy.swift
+          - MeetingBar/Notifications/NotificationPlanner.swift
+          - MeetingBar/Notifications/NotificationScheduler.swift
+          - MeetingBar/Notifications/NotificationActionRunner.swift
+          - MeetingBar/Notifications/NotificationResponseAction.swift
+          - MeetingBar/UI/StatusBar/StatusBarPresentation.swift
+          - MeetingBar/UI/StatusBar/StatusBarMenuState.swift
+          - MeetingBar/Preferences/PreferencesPresentation.swift
+          - MeetingBar/Settings/AppSettings.swift
+      # Keep every changed application source visible, including system adapters
+      # and mixed UI/provider implementations. This is NOT a second blocking
+      # gate and deliberately overlaps domain_logic rather than hiding files.
+      full_app:
+        target: 85%
+        informational: true
+        paths:
+          - MeetingBar/
