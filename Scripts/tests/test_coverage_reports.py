@@ -12,22 +12,24 @@ sys.path.insert(0, str(SCRIPTS))
 
 from validate_coverage_reports import (  # noqa: E402
     CoverageReportError,
-    main,
     validate_cobertura,
     validate_lcov,
 )
 
 
-LCOV = "TN:\\nSF:MeetingBar/Calendar/EventFiltering.swift\\nDA:12,1\\nDA:13,0\\nend_of_record\\n"
+LCOV = (
+    "TN:\\n"
+    "SF:MeetingBar/Calendar/EventFiltering.swift\\n"
+    "DA:12,1\\n"
+    "DA:13,0\\n"
+    "end_of_record\\n"
+)
 XML = (
     '<coverage lines-valid="2" lines-covered="1">'
     '<packages><package name="MeetingBar"><classes>'
     '<class name="CalendarSync" filename="CalendarSync.swift"/>'
     '</classes></package></packages></coverage>'
 )
-# Fixtures use real newline delimiters (escaped in the Python literal above).
-LCOV = LCOV.replace("\\n", "\n")
-
 
 class CoverageReportsTests(unittest.TestCase):
     def setUp(self):
